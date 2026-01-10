@@ -1,0 +1,39 @@
+name: contas_em_dia
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.2.1
+  sqflite: ^2.0.0+4
+  path: ^1.8.3
+  flutter_local_notifications: ^19.5.0
+  intl: ^0.20.2
+  timezone: ^0.10.1
+  flutter_native_timezone: ^2.0.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+
+
+dependency_overrides:
+  flutter_native_timezone:
+    path: plugins/flutter_native_timezone
