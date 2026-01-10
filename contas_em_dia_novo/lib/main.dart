@@ -617,6 +617,7 @@ class NotificationHelper {
 
   Future<void> cancelNotification(int id) async => await _plugin.cancel(id);
 }
+
 */
 
 
@@ -691,6 +692,7 @@ class NotificationHelper {
 
 
 
+/*
 // Contas em Dia — Flutter (main.dart)
 // Código-fonte mínimo funcional com:
 // - Listagem de contas
@@ -1455,6 +1457,7 @@ class NotificationHelper {
 
   Future<void> cancelNotification(int id) async => await _plugin.cancel(id);
 }
+ */
 
 
 
@@ -2009,3 +2012,1190 @@ class NotificationHelper {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+import 'package:flutter/services.dart';
+
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_native_timezone/flutter_native_timezone.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseHelper.instance.database;
+
+  tz.initializeTimeZones();
+  final String timeZoneName = await FlutterNativeTimezone.getLocalTimezone();
+  tz.setLocalLocation(tz.getLocation(timeZoneName));
+
+  await NotificationHelper.instance.init();
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Contas em Dia',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.green,
+      ),
+      home: HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  List<Billing> _items = [];
+  String _filter = 'Todas';
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final all = await DatabaseHelper.instance.getAll();
+    setState(() {
+      if (_filter == 'Todas') {
+        _items = all;
+      } else if (_filter == 'Pagas') {
+        _items = all.where((e) => e.paid == 1).toList();
+      } else {
+        _items = all.where((e) => e.paid == 0).toList();
+      }
+    });
+  }
+
+  String _formatMoney(double v) =>
+      NumberFormat.simpleCurrency(locale: 'pt_BR').format(v);
+
+  Widget _buildCard(String title, List<Billing> bills, Color color) {
+    if (bills.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: color.withOpacity(0.85),
+      margin: const EdgeInsets.all(10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
+            const SizedBox(height: 8),
+            ...bills.map((b) => ListTile(
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      b.name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      DateFormat('dd/MM').format(b.dueDate),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Text(
+                b.amount > 0
+                    ? _formatMoney(b.amount)
+                    : 'Valor não informado',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              leading: Checkbox(
+                value: b.paid == 1,
+                onChanged: (v) async {
+                  b.paid = v! ? 1 : 0;
+                  await DatabaseHelper.instance.update(b);
+                  await _reload();
+                },
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete, color: Colors.white),
+                onPressed: () async {
+                  await DatabaseHelper.instance.delete(b.id!);
+                  await _reload();
+                },
+              ),
+            ))
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendentes = _items.where((b) => b.paid == 0).toList();
+    final pagas = _items.where((b) => b.paid == 1).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Contas em Dia'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              setState(() => _filter = v);
+              _reload();
+            },
+            itemBuilder: (_) =>
+                ['Todas', 'Pagas', 'Pendentes']
+                    .map((e) => PopupMenuItem(value: e, child: Text(e)))
+                    .toList(),
+          )
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            if (_filter != 'Pagas')
+              _buildCard('Pendentes', pendentes, Colors.orange),
+            if (_filter != 'Pendentes')
+              _buildCard('Pagas', pagas, Colors.green),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('Nova conta'),
+        onPressed: () async {
+          final r = await Navigator.push(
+              context, MaterialPageRoute(builder: (_) => EditPage()));
+          if (r == true) _reload();
+        },
+      ),
+    );
+  }
+}
+
+class EditPage extends StatefulWidget {
+  final Billing? billing;
+  const EditPage({this.billing});
+
+  @override
+  _EditPageState createState() => _EditPageState();
+}
+
+class _EditPageState extends State<EditPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  DateTime _due = DateTime.now();
+  bool _recurring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.billing != null) {
+      _nameCtrl.text = widget.billing!.name;
+      if (widget.billing!.amount > 0) {
+        _amountCtrl.text = widget.billing!.amount.toStringAsFixed(2);
+      }
+      _due = widget.billing!.dueDate;
+      _recurring = widget.billing!.recurring == 1;
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final amountText = _amountCtrl.text.trim();
+    final amount = amountText.isEmpty
+        ? 0.0
+        : double.tryParse(amountText.replaceAll(',', '.')) ?? 0.0;
+
+    final b = widget.billing ??
+        Billing(
+            name: '',
+            amount: 0,
+            dueDate: _due,
+            recurring: 0,
+            paid: 0);
+
+    b
+      ..name = _nameCtrl.text.trim()
+      ..amount = amount
+      ..dueDate = _due
+      ..recurring = _recurring ? 1 : 0;
+
+    if (b.id == null) {
+      b.id = await DatabaseHelper.instance.insert(b);
+    } else {
+      await DatabaseHelper.instance.update(b);
+    }
+
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+          title: Text(widget.billing == null
+              ? 'Nova conta'
+              : 'Editar conta')),
+      body: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              TextFormField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nome'),
+                validator: (v) =>
+                v == null || v.isEmpty ? 'Informe o nome' : null,
+              ),
+              TextFormField(
+                controller: _amountCtrl,
+                decoration:
+                const InputDecoration(labelText: 'Valor (opcional)'),
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9\.,]'))
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                      'Vencimento: ${DateFormat('dd/MM/yyyy').format(_due)}'),
+                  const Spacer(),
+                  TextButton(
+                    child: const Text('Escolher'),
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context,
+                        initialDate: _due,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (d != null) setState(() => _due = d);
+                    },
+                  )
+                ],
+              ),
+              CheckboxListTile(
+                title: const Text('Recorrente'),
+                value: _recurring,
+                onChanged: (v) => setState(() => _recurring = v!),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _save,
+                child: const Text('Salvar'),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+*//* MODELS, DB E NOTIFICATION HELPERS
+   👉 Mantidos iguais aos seus (sem alteração de lógica)
+*//*
+
+// --- Models & DB helper ---
+class Billing {
+  int? id;
+  String name;
+  double amount;
+  DateTime dueDate;
+  int recurring; // 0/1
+  int paid; // 0/1
+
+  Billing({this.id, required this.name, required this.amount, required this.dueDate, this.recurring = 0, this.paid = 0});
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'amount': amount,
+    'dueDate': dueDate.toIso8601String(),
+    'recurring': recurring,
+    'paid': paid,
+  };
+
+  static Billing fromMap(Map<String, dynamic> m) => Billing(
+    id: m['id'] as int?,
+    name: m['name'],
+    amount: (m['amount'] as num).toDouble(),
+    dueDate: DateTime.parse(m['dueDate']),
+    recurring: m['recurring'],
+    paid: m['paid'],
+  );
+
+  static Billing copyWithNextMonth(Billing b) {
+    final next = DateTime(b.dueDate.year, b.dueDate.month + 1, b.dueDate.day);
+    return Billing(name: b.name, amount: b.amount, dueDate: next, recurring: b.recurring, paid: 0);
+  }
+}
+class DatabaseHelper {
+  // Singleton
+  DatabaseHelper._privateConstructor();
+  static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
+
+  static Database? _database;
+
+  // Getter que estava faltando
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  // Inicializa o banco
+  Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = p.join(dbPath, 'bills.db');
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: _onCreate,
+    );
+  }
+
+  // Criação das tabelas
+  Future _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE bills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        dueDate TEXT NOT NULL,
+        recurring INTEGER NOT NULL,
+        paid INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  // Métodos CRUD
+  Future<int> insert(Billing b) async {
+    final db = await database;
+    return await db.insert('bills', b.toMap());
+  }
+
+  Future<int> update(Billing b) async {
+    final db = await database;
+    return await db.update(
+      'bills',
+      b.toMap(),
+      where: 'id = ?',
+      whereArgs: [b.id],
+    );
+  }
+
+  Future<int> delete(int id) async {
+    final db = await database;
+    return await db.delete(
+      'bills',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<Billing>> getAll() async {
+    final db = await database;
+    final result = await db.query('bills', orderBy: 'dueDate ASC');
+    return result.map((e) => Billing.fromMap(e)).toList();
+  }
+}
+
+// --- Notifications ---
+class NotificationHelper {
+  static final NotificationHelper instance = NotificationHelper._();
+  NotificationHelper._();
+  final _plugin = FlutterLocalNotificationsPlugin();
+
+  Future<void> init() async {
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iOS = DarwinInitializationSettings();
+    await _plugin.initialize(const InitializationSettings(android: android, iOS: iOS));
+  }
+
+  Future<void> scheduleNotificationForBilling(Billing b) async {
+    if (b.paid == 1) return;
+
+    final when = b.dueDate.subtract(const Duration(days: 5));
+    if (when.isBefore(DateTime.now())) return;
+
+    final androidDetails = AndroidNotificationDetails(
+      'contas_channel',
+      'Lembretes',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    final iosDetails = DarwinNotificationDetails();
+
+    await _plugin.zonedSchedule(
+      b.id ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'Vencimento: ${b.name}',
+      'Vence em ${DateFormat('dd/MM/yyyy').format(b.dueDate)} — '
+          '${NumberFormat.simpleCurrency(locale: 'pt_BR').format(b.amount)}',
+      tz.TZDateTime.from(when, tz.local),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dateAndTime, // opcional
+    );
+
+  }
+
+  Future<void> cancelNotification(int id) async => await _plugin.cancel(id);
+}*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+import 'package:flutter/services.dart';
+
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_native_timezone/flutter_native_timezone.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseHelper.instance.database;
+
+  tz.initializeTimeZones();
+  final String timeZoneName = await FlutterNativeTimezone.getLocalTimezone();
+  tz.setLocalLocation(tz.getLocation(timeZoneName));
+
+  await NotificationHelper.instance.init();
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Contas em Dia',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.green,
+      ),
+      home: const MainPage(),
+    );
+  }
+}
+
+class MainPage extends StatefulWidget {
+  const MainPage({Key? key}) : super(key: key);
+
+  @override
+  State<MainPage> createState() => _MainPageState();
+}
+
+class _MainPageState extends State<MainPage> {
+  int _index = 0;
+
+  final _pages =  [
+    HomePage(),
+    FilterPage(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _pages[_index],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.filter_list),
+            label: 'Filtrar',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+class HomePage extends StatefulWidget {
+  @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  List<Billing> _items = [];
+  String _filter = 'Todas';
+
+  DateTime _normalize(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final all = await DatabaseHelper.instance.getAll();
+    setState(() => _items = all);
+  }
+
+  String _formatMoney(double v) =>
+      NumberFormat.simpleCurrency(locale: 'pt_BR').format(v);
+
+  Widget _buildCard(String title, List<Billing> bills, Color color) {
+    if (bills.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: color.withOpacity(0.85),
+      margin: const EdgeInsets.all(10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
+            const SizedBox(height: 8),
+            ...bills.map((b) => ListTile(
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      b.name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      DateFormat('dd/MM').format(b.dueDate),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Text(
+                b.amount > 0
+                    ? formatMoney(b.amount)
+                    : 'Valor não informado',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              leading: Checkbox(
+                value: b.paid == 1,
+                onChanged: (v) async {
+                  b.paid = v! ? 1 : 0;
+                  await DatabaseHelper.instance.update(b);
+                  await _reload();
+                },
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon:
+                    const Icon(Icons.edit, color: Colors.white),
+                    onPressed: () async {
+                      final result =
+                      await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              EditPage(billing: b),
+                        ),
+                      );
+                      if (result == true) await _reload();
+                    },
+                  ),
+                  IconButton(
+                    icon:
+                    const Icon(Icons.delete, color: Colors.white),
+                    onPressed: () async {
+                      await DatabaseHelper.instance.delete(b.id!);
+                      await _reload();
+                    },
+                  ),
+                ],
+              ),
+            ))
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = _normalize(DateTime.now());
+
+    final atrasadas = _items.where((b) =>
+    b.paid == 0 && _normalize(b.dueDate).isBefore(today)).toList();
+
+    final proximos5 = _items.where((b) {
+      final diff =
+          _normalize(b.dueDate).difference(today).inDays;
+      return b.paid == 0 && diff >= 0 && diff <= 5;
+    }).toList();
+
+    final futuras = _items.where((b) {
+      final diff =
+          _normalize(b.dueDate).difference(today).inDays;
+      return b.paid == 0 && diff > 5;
+    }).toList();
+
+    final pagas = _items.where((b) => b.paid == 1).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.check_circle_outline,
+                color: Colors.green,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Contas em Dia',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                Text(
+                  'Organize seus pagamentos',
+                  style: TextStyle(
+                    color: Colors.black54,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+
+      // appBar: AppBar(
+      //   title: const Text('Contas em Dia'),
+      //   actions: [
+      //     PopupMenuButton<String>(
+      //       onSelected: (v) {
+      //         setState(() => _filter = v);
+      //       },
+      //       itemBuilder: (_) => ['Todas', 'Pagas', 'Pendentes']
+      //           .map((e) =>
+      //           PopupMenuItem(value: e, child: Text(e)))
+      //           .toList(),
+      //     ),
+      //   ],
+      // ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            if (_filter != 'Pagas')
+              _buildCard('⚠️ Contas atrasadas', atrasadas, Colors.red),
+            if (_filter != 'Pagas')
+              _buildCard('⏰ Próximos 5 dias', proximos5, Colors.orange),
+            if (_filter != 'Pagas')
+              _buildCard('📅 Contas futuras', futuras, Colors.blue),
+            if (_filter != 'Pendentes')
+              _buildCard('✅ Contas pagas', pagas, Colors.green),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('Nova conta'),
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => EditPage()),
+          );
+          if (result == true) await _reload();
+        },
+      ),
+    );
+  }
+}
+
+/* ===================== EDIT PAGE ===================== */
+
+class EditPage extends StatefulWidget {
+  final Billing? billing;
+  const EditPage({this.billing});
+
+  @override
+  _EditPageState createState() => _EditPageState();
+}
+
+class _EditPageState extends State<EditPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  DateTime _due = DateTime.now();
+  bool _recurring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.billing != null) {
+      _nameCtrl.text = widget.billing!.name;
+      if (widget.billing!.amount > 0) {
+        _amountCtrl.text =
+            widget.billing!.amount.toStringAsFixed(2);
+      }
+      _due = widget.billing!.dueDate;
+      _recurring = widget.billing!.recurring == 1;
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final amountText = _amountCtrl.text.trim();
+    final amount = amountText.isEmpty
+        ? 0.0
+        : double.tryParse(
+        amountText.replaceAll(',', '.')) ??
+        0.0;
+
+    final b = widget.billing ??
+        Billing(
+            name: '',
+            amount: 0,
+            dueDate: _due,
+            recurring: 0,
+            paid: 0);
+
+    b
+      ..name = _nameCtrl.text.trim()
+      ..amount = amount
+      ..dueDate = _due
+      ..recurring = _recurring ? 1 : 0;
+
+    if (b.id == null) {
+      b.id = await DatabaseHelper.instance.insert(b);
+    } else {
+      await DatabaseHelper.instance.update(b);
+    }
+
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+          title: Text(widget.billing == null
+              ? 'Nova conta'
+              : 'Editar conta')),
+      body: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              TextFormField(
+                controller: _nameCtrl,
+                decoration:
+                const InputDecoration(labelText: 'Nome'),
+                validator: (v) =>
+                v == null || v.isEmpty
+                    ? 'Informe o nome'
+                    : null,
+              ),
+              TextFormField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(
+                    labelText: 'Valor (opcional)'),
+                keyboardType:
+                const TextInputType.numberWithOptions(
+                    decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                      RegExp(r'[0-9\.,]'))
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                      'Vencimento: ${DateFormat('dd/MM/yyyy').format(_due)}'),
+                  const Spacer(),
+                  TextButton(
+                    child: const Text('Escolher'),
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context,
+                        initialDate: _due,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (d != null)
+                        setState(() => _due = d);
+                    },
+                  )
+                ],
+              ),
+              CheckboxListTile(
+                title: const Text('Recorrente'),
+                value: _recurring,
+                onChanged: (v) =>
+                    setState(() => _recurring = v!),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _save,
+                child: const Text('Salvar'),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ===================== MODEL ===================== */
+
+class Billing {
+  int? id;
+  String name;
+  double amount;
+  DateTime dueDate;
+  int recurring;
+  int paid;
+
+  Billing(
+      {this.id,
+        required this.name,
+        required this.amount,
+        required this.dueDate,
+        this.recurring = 0,
+        this.paid = 0});
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'amount': amount,
+    'dueDate': dueDate.toIso8601String(),
+    'recurring': recurring,
+    'paid': paid,
+  };
+
+  static Billing fromMap(Map<String, dynamic> m) => Billing(
+    id: m['id'],
+    name: m['name'],
+    amount: (m['amount'] as num).toDouble(),
+    dueDate: DateTime.parse(m['dueDate']),
+    recurring: m['recurring'],
+    paid: m['paid'],
+  );
+}
+
+/* ===================== DATABASE ===================== */
+
+class DatabaseHelper {
+  DatabaseHelper._();
+  static final instance = DatabaseHelper._();
+  static Database? _db;
+
+  Future<Database> get database async {
+    _db ??= await _initDb();
+    return _db!;
+  }
+
+  Future<Database> _initDb() async {
+    final path = p.join(await getDatabasesPath(), 'bills.db');
+    return openDatabase(path, version: 1,
+        onCreate: (db, _) async {
+          await db.execute('''
+        CREATE TABLE bills(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          amount REAL,
+          dueDate TEXT,
+          recurring INTEGER,
+          paid INTEGER
+        )
+      ''');
+        });
+  }
+
+  Future<List<Billing>> getAll() async {
+    final db = await database;
+    final res = await db.query('bills');
+    return res.map((e) => Billing.fromMap(e)).toList();
+  }
+
+  Future<int> insert(Billing b) async =>
+      (await database).insert('bills', b.toMap());
+
+  Future<int> update(Billing b) async =>
+      (await database).update('bills', b.toMap(),
+          where: 'id=?', whereArgs: [b.id]);
+
+  Future<int> delete(int id) async =>
+      (await database)
+          .delete('bills', where: 'id=?', whereArgs: [id]);
+}
+
+/* ===================== NOTIFICATIONS ===================== */
+
+class NotificationHelper {
+  static final instance = NotificationHelper._();
+  NotificationHelper._();
+
+  final _plugin = FlutterLocalNotificationsPlugin();
+
+  Future<void> init() async {
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const ios = DarwinInitializationSettings();
+    await _plugin.initialize(
+        const InitializationSettings(android: android, iOS: ios));
+  }
+}
+
+
+
+class FilterPage extends StatefulWidget {
+  const FilterPage({Key? key}) : super(key: key);
+
+  @override
+  State<FilterPage> createState() => _FilterPageState();
+}
+
+class _FilterPageState extends State<FilterPage> {
+  List<Billing> _items = [];
+  String _filter = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final all = await DatabaseHelper.instance.getAll();
+    setState(() => _items = all);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _items
+        .where((b) =>
+        b.name.toLowerCase().contains(_filter.toLowerCase()))
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Filtrar contas'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Buscar por nome',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _filter = v),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _items.length,
+              itemBuilder: (context, index) {
+                final b = _items[index];
+
+                return Card(
+                  color: statusColor(b).withOpacity(0.12),
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    title: Text(
+                      b.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      'Vence em ${DateFormat('dd/MM').format(b.dueDate)}',
+                    ),
+                    trailing: Text(
+                      formatMoney(b.amount),
+                      style: TextStyle(
+                        color: statusColor(b),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+        ],
+      ),
+    );
+  }
+}
+
+String formatMoney(double value) {
+  return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
+}
+
+Color statusColor(Billing b) {
+  final now = DateTime.now();
+
+  if (b.paid == 1) {
+    return Colors.green;
+  }
+
+  if (b.dueDate.isBefore(DateTime(now.year, now.month, now.day))) {
+    return Colors.red;
+  }
+
+  return Colors.orange;
+}
