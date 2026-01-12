@@ -300,17 +300,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 40,
+              height: 40,
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: Colors.green.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
-                Icons.check_circle_outline,
-                color: Colors.green,
-                size: 28,
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                fit: BoxFit.contain,
               ),
             ),
+
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +327,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   ),
                 ),
                 Text(
-                  'Organize seus pagamentos',
+                  'Suas contas, no dia certo',
                   style: TextStyle(
                     color: Colors.black54,
                     fontSize: 12,
