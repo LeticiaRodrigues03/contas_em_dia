@@ -84,6 +84,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with RouteAware {
 
+  // ✅ COLOQUE AQUI
+  DateTime _onlyDate(DateTime d) =>
+      DateTime(d.year, d.month, d.day);
+
   // ✅ 1. FICA AQUI (logo abaixo da classe)
   Widget _verTodasPagasButton(BuildContext context) {
     return Center(
@@ -259,20 +263,23 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    final today = _normalize(DateTime.now());
+    //final today = _normalize(DateTime.now());
+    final today = _onlyDate(DateTime.now());
 
-    final atrasadas = _items.where((b) =>
-    b.paid == 0 && _normalize(b.dueDate).isBefore(today)).toList();
+    final atrasadas = _items.where((b) {
+      final due = _onlyDate(b.dueDate);
+      return b.paid == 0 && due.isBefore(today);
+    }).toList();
 
     final proximos5 = _items.where((b) {
-      final diff =
-          _normalize(b.dueDate).difference(today).inDays;
+      final due = _onlyDate(b.dueDate);
+      final diff = due.difference(today).inDays;
       return b.paid == 0 && diff >= 0 && diff <= 5;
     }).toList();
 
     final futuras = _items.where((b) {
-      final diff =
-          _normalize(b.dueDate).difference(today).inDays;
+      final due = _onlyDate(b.dueDate);
+      final diff = due.difference(today).inDays;
       return b.paid == 0 && diff > 5;
     }).toList();
 
@@ -423,23 +430,21 @@ class _EditPageState extends State<EditPage> {
     final amountText = _amountCtrl.text.replaceAll(',', '.');
     final amount = amountText.isEmpty ? 0.0 : double.tryParse(amountText) ?? 0.0;
 
+    Billing b;
+
     if (widget.billing == null) {
-      final b = Billing(
+      // CRIAR
+      b = Billing(
         name: name,
         amount: amount,
         dueDate: _due,
         recurring: _recurring ? 1 : 0,
         paid: 0,
       );
-
       b.id = await DatabaseHelper.instance.insert(b);
-      await NotificationHelper.instance.scheduleNotificationForBilling(b);
-
-      if (mounted) {
-        Navigator.of(context).pop(true);
-      }
     } else {
-      final updated = Billing(
+      // EDITAR
+      b = Billing(
         id: widget.billing!.id,
         name: name,
         amount: amount,
@@ -447,23 +452,22 @@ class _EditPageState extends State<EditPage> {
         recurring: _recurring ? 1 : 0,
         paid: widget.billing!.paid,
       );
-
-      await DatabaseHelper.instance.update(updated);
-
-      // 👇 fecha a tela IMEDIATAMENTE
-      if (mounted) {
-        Navigator.of(context).pop(true);
-      }
-
-      // 👇 notificação roda em background
-      Future.microtask(() async {
-        await NotificationHelper.instance
-            .cancelNotification(updated.id!);
-        await NotificationHelper.instance
-            .scheduleNotificationForBilling(updated);
-      });
+      await DatabaseHelper.instance.update(b);
     }
+
+    // 🔔 notificações SEM travar UI
+    Future.microtask(() async {
+      if (b.id != null) {
+        await NotificationHelper.instance.cancelNotification(b.id!);
+        await NotificationHelper.instance.scheduleNotificationForBilling(b);
+      }
+    });
+
+    // ✅ FECHA A TELA SEMPRE
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
+
 
 
   @override
