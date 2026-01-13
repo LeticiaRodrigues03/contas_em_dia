@@ -308,7 +308,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Image.asset(
-                'assets/icon/app_icon.png',
+                'assets/icon/app_logo1.png',
                 fit: BoxFit.contain,
               ),
             ),
@@ -375,7 +375,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
       ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
-        label: const Text('Nova conta'),
+        //label: const Text('Nova conta'),
+        label: const Text(''),
         onPressed: () async {
           final result = await Navigator.push(
             context,
