@@ -25,19 +25,24 @@ Future<void> main() async {
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Contas em Dia',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.green,
+        ),
         useMaterial3: true,
-        colorSchemeSeed: Colors.green,
       ),
-      navigatorObservers: [routeObserver],
       home: const MainPage(),
     );
   }
 }
+
 
 class MainPage extends StatefulWidget {
   const MainPage({Key? key}) : super(key: key);
@@ -78,11 +83,89 @@ class _MainPageState extends State<MainPage> {
 
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> with RouteAware {
+
+  Widget _emptyHomeState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ÍCONE
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 56,
+                color: Colors.green,
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // TEXTO PRINCIPAL
+            const Text(
+              'Tudo em dia por aqui 💚',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // TEXTO SECUNDÁRIO
+            const Text(
+              'Você ainda não cadastrou nenhuma conta.\n'
+                  'Adicione sua primeira conta para começar.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.black54,
+                fontSize: 14,
+              ),
+            ),
+
+            const SizedBox(height: 28),
+
+            // CTA
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Adicionar primeira conta'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 26,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditPage()),
+                );
+                if (result == true) _reload();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   // ✅ COLOQUE AQUI
   DateTime _onlyDate(DateTime d) =>
@@ -218,7 +301,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   b.paid = v! ? 1 : 0;
                   await DatabaseHelper.instance.update(b);
                   await _reload();
+
+                  showSnack(
+                    context,
+                    b.paid == 1
+                        ? 'Conta marcada como paga'
+                        : 'Conta marcada como pendente',
+                  );
                 },
+
               ),
               trailing: PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -234,9 +325,41 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   }
 
                   if (value == 'excluir') {
-                    await DatabaseHelper.instance.delete(b.id!);
-                    await _reload();
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('Excluir conta'),
+                        content: Text(
+                          'Deseja realmente excluir a conta "${b.name}"?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Excluir'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      await DatabaseHelper.instance.delete(b.id!);
+                      await _reload();
+
+                      showSnack(
+                        context,
+                        'Conta excluída',
+                        color: Colors.red,
+                      );
+                    }
                   }
+
                 },
                 itemBuilder: (context) => const [
                   PopupMenuItem(
@@ -353,7 +476,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       //     ),
       //   ],
       // ),
-      body: SingleChildScrollView(
+      body: _items.isEmpty
+          ? _emptyHomeState(context)
+          : SingleChildScrollView(
         child: Column(
           children: [
             if (_filter != 'Pagas')
@@ -369,14 +494,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 Colors.green,
                 footer: _verTodasPagasButton(context),
               ),
-            //_buildCard('✅ Contas pagas recentes', pagasLimitadas, Colors.green),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add),
-        //label: const Text('Nova conta'),
-        label: const Text(''),
+
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -385,6 +508,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
           if (result == true) await _reload();
         },
       ),
+
     );
   }
 }
@@ -465,6 +589,14 @@ class _EditPageState extends State<EditPage> {
         await NotificationHelper.instance.scheduleNotificationForBilling(b);
       }
     });
+
+    // ✅ feedback visual
+    showSnack(
+      context,
+      widget.billing == null
+          ? 'Conta criada com sucesso'
+          : 'Conta atualizada com sucesso',
+    );
 
     // ✅ FECHA A TELA SEMPRE
     if (!mounted) return;
@@ -900,7 +1032,7 @@ class _FilterPageState extends State<FilterPage> {
           // 🔹 LIST
           Expanded(
             child: _items.isEmpty
-                ? const Center(child: Text('Nenhuma conta encontrada'))
+                ? _emptyState(context)
                 : ListView.builder(
               itemCount: _items.length,
               itemBuilder: (context, i) {
@@ -919,17 +1051,123 @@ class _FilterPageState extends State<FilterPage> {
                     if (result == true) _load();
                   },
                   onDelete: () async {
-                    await DatabaseHelper.instance.delete(b.id!);
-                    _load();
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('Excluir conta'),
+                        content: Text(
+                          'Deseja realmente excluir a conta "${b.name}"?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Excluir'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      await DatabaseHelper.instance.delete(b.id!);
+                      _load();
+
+                      showSnack(
+                        context,
+                        'Conta excluída',
+                        color: Colors.red,
+                      );
+                    }
                   },
                 );
               },
             ),
           ),
+
         ],
       ),
     );
   }
+
+  Widget _emptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ÍCONE
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.receipt_long,
+                size: 48,
+                color: Colors.green,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // TEXTO PRINCIPAL
+            const Text(
+              'Nada por aqui ainda 😊',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // TEXTO SECUNDÁRIO
+            const Text(
+              'Adicione uma conta para começar a organizar seus pagamentos.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.black54,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // CTA
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Adicionar nova conta'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditPage()),
+                );
+                if (result == true) _load();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }
 
 
@@ -1008,6 +1246,124 @@ class ContaCard extends StatelessWidget {
             PopupMenuItem(value: 'editar', child: Text('Editar')),
             PopupMenuItem(value: 'excluir', child: Text('Excluir')),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+void showSnack(
+    BuildContext context,
+    String message, {
+      Color color = const Color(0xFF2E7D32),
+      IconData icon = Icons.check_circle,
+    }) {
+  final snackBar = SnackBar(
+    behavior: SnackBarBehavior.floating,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+    duration: const Duration(seconds: 3),
+    content: _AnimatedSnackContent(
+      message: message,
+      icon: icon,
+      backgroundColor: color,
+    ),
+  );
+
+  ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(snackBar);
+}
+
+class _AnimatedSnackContent extends StatefulWidget {
+  final String message;
+  final IconData icon;
+  final Color backgroundColor;
+
+  const _AnimatedSnackContent({
+    required this.message,
+    required this.icon,
+    required this.backgroundColor,
+  });
+
+  @override
+  State<_AnimatedSnackContent> createState() =>
+      _AnimatedSnackContentState();
+}
+
+class _AnimatedSnackContentState extends State<_AnimatedSnackContent>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fade;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    _fade = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+
+    _scale = Tween<double>(begin: 0.9, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: widget.backgroundColor,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              )
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, color: Colors.white, size: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  widget.message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
