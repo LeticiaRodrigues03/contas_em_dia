@@ -9,6 +9,9 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_native_timezone/flutter_native_timezone.dart';
 
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+
 final RouteObserver<ModalRoute<void>> routeObserver =
 RouteObserver<ModalRoute<void>>();
 
@@ -24,45 +27,194 @@ Future<void> main() async {
   runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isDark = false;
+
+  void _toggleTheme(bool value) {
+    setState(() {
+      _isDark = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Contas em Dia',
       debugShowCheckedModeBanner: false,
+
+      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
+
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.green,
+          brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),
-      home: const MainPage(),
+
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.green,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+
+      /// 🔒 TRAVA O ZOOM DE TEXTO (ESSENCIAL)
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(textScaleFactor: 1.0),
+          child: child!,
+        );
+      },
+
+      home: MainPage(
+        isDark: _isDark,
+        onThemeChanged: _toggleTheme,
+      ),
     );
   }
 }
 
 
+// class MyApp extends StatefulWidget {
+//   const MyApp({super.key});
+//
+//   @override
+//   State<MyApp> createState() => _MyAppState();
+// }
+
+// class _MyAppState extends State<MyApp> {
+//   ThemeMode _themeMode = ThemeMode.light;
+//
+//   void toggleTheme(bool isDark) {
+//     setState(() {
+//       _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+//     });
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       title: 'Contas em Dia',
+//       debugShowCheckedModeBanner: false,
+//
+//       theme: ThemeData(
+//         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+//         useMaterial3: true,
+//       ),
+//
+//       darkTheme: ThemeData(
+//         useMaterial3: true,
+//         brightness: Brightness.dark,
+//
+//         scaffoldBackgroundColor: const Color(0xFF121915), // verde escuro elegante
+//
+//         colorScheme: const ColorScheme.dark(
+//           primary: Color(0xFF4CAF50), // verde principal
+//           secondary: Color(0xFF81C784), // verde mais claro
+//           surface: Color(0xFF1B241E), // cards / superfícies
+//           background: Color(0xFF121915),
+//           error: Color(0xFFE57373),
+//           onPrimary: Colors.white,
+//           onSecondary: Colors.black,
+//           onSurface: Color(0xFFE0E0E0),
+//           onBackground: Color(0xFFE0E0E0),
+//         ),
+//
+//         appBarTheme: const AppBarTheme(
+//           backgroundColor: Color(0xFF121915),
+//           surfaceTintColor: Color(0xFF121915),
+//           elevation: 0,
+//           iconTheme: IconThemeData(color: Color(0xFF81C784)),
+//           titleTextStyle: TextStyle(
+//             color: Color(0xFFE8F5E9),
+//             fontSize: 20,
+//             fontWeight: FontWeight.bold,
+//           ),
+//         ),
+//
+//         cardTheme: const CardThemeData(
+//           elevation: 4,
+//           margin: EdgeInsets.all(10),
+//         ),
+//
+//         floatingActionButtonTheme: const FloatingActionButtonThemeData(
+//           backgroundColor: Color(0xFF4CAF50),
+//           foregroundColor: Colors.white,
+//         ),
+//
+//         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+//           backgroundColor: Color(0xFF121915),
+//           selectedItemColor: Color(0xFF81C784),
+//           unselectedItemColor: Colors.white54,
+//           showUnselectedLabels: true,
+//         ),
+//
+//         snackBarTheme: const SnackBarThemeData(
+//           backgroundColor: Color(0xFF2E7D32),
+//           contentTextStyle: TextStyle(color: Colors.white),
+//         ),
+//       ),
+//
+//
+//       themeMode: _themeMode,
+//
+//       home: MainPage(
+//         onThemeChanged: toggleTheme,
+//         isDark: _themeMode == ThemeMode.dark,
+//       ),
+//     );
+//   }
+// }
+
+
+
+// class MainPage extends StatefulWidget {
+//   const MainPage({Key? key}) : super(key: key);
+//
+//   @override
+//   State<MainPage> createState() => _MainPageState();
+// }
+
 class MainPage extends StatefulWidget {
-  const MainPage({Key? key}) : super(key: key);
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
+
+  const MainPage({
+    Key? key,
+    required this.isDark,
+    required this.onThemeChanged,
+  }) : super(key: key);
 
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
+
 class _MainPageState extends State<MainPage> {
   int _index = 0;
 
-  final _pages =  [
-    HomePage(),
-    FilterPage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      HomePage(
+        isDark: widget.isDark,                 // ✅ sempre atualizado
+        onThemeChanged: widget.onThemeChanged,
+      ),
+      const FilterPage(),
+    ];
+
     return Scaffold(
-      body: _pages[_index],
+      body: pages[_index],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
@@ -83,11 +235,19 @@ class _MainPageState extends State<MainPage> {
 
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
+
+  const HomePage({
+    super.key,
+    required this.isDark,
+    required this.onThemeChanged,
+  });
 
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
+
 
 class _HomePageState extends State<HomePage> with RouteAware {
 
@@ -106,10 +266,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 color: Colors.green.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.account_balance_wallet_outlined,
                 size: 56,
-                color: Colors.green,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
 
@@ -127,13 +287,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
             const SizedBox(height: 10),
 
             // TEXTO SECUNDÁRIO
-            const Text(
+            Text(
               'Você ainda não cadastrou nenhuma conta.\n'
                   'Adicione sua primeira conta para começar.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.black54,
-                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
 
@@ -245,11 +404,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
         Widget? footer,
       }) {
     if (bills.isEmpty) return const SizedBox.shrink();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: color.withOpacity(0.85),
+
+
+    color: isDark
+        ? color.withOpacity(0.65)
+        : color.withOpacity(0.85),
       margin: const EdgeInsets.all(10),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -406,6 +570,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return b.paid == 0 && diff > 5;
     }).toList();
 
+    for (var b in _items) {
+      print('${b.name} | paid: ${b.paid} | type: ${b.paid.runtimeType}');
+    }
+
     final pagas = _items
         .where((b) => b.paid == 1)
         .toList()
@@ -418,8 +586,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.background,
+        surfaceTintColor: Theme.of(context).colorScheme.background,
         title: Row(
           children: [
             Container(
@@ -439,11 +607,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Contas em Dia',
                   style: TextStyle(
-                    color: Colors.black87,
+                    color: Theme.of(context).colorScheme.onBackground,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.4,
@@ -452,14 +620,37 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 Text(
                   'Suas contas, no dia certo',
                   style: TextStyle(
-                    color: Colors.black54,
-                    fontSize: 12,
+                    fontSize: 12.5, // 👈 menor e mais “subtitle”
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.65),
                   ),
                 ),
               ],
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.settings,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SettingsPage(
+                    isDark: widget.isDark,
+                    onThemeChanged: widget.onThemeChanged,
+                  ),
+                ),
+              );
+            },
+          ),
+
+
+        ],
       ),
 
       // appBar: AppBar(
@@ -487,7 +678,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
               _buildCard('⏰ Próximos 5 dias', proximos5, Colors.orange),
             if (_filter != 'Pagas')
               _buildCard('📅 Contas futuras', futuras, Colors.blue),
-            if (_filter != 'Pendentes' && pagas.length > 1)
+            if (_filter != 'Pendentes' && pagas.length >= 1)
               _buildCard(
                 '✅ Contas pagas',
                 pagasLimitadas,
@@ -551,11 +742,16 @@ class _EditPageState extends State<EditPage> {
   }
 
   Future<void> _save() async {
+    // if (!_formKey.currentState!.validate()) return;
+    //
+    // final name = _nameCtrl.text.trim();
+    // final amountText = _amountCtrl.text.replaceAll(',', '.');
+    // final amount = amountText.isEmpty ? 0.0 : double.tryParse(amountText) ?? 0.0;
+
     if (!_formKey.currentState!.validate()) return;
 
     final name = _nameCtrl.text.trim();
-    final amountText = _amountCtrl.text.replaceAll(',', '.');
-    final amount = amountText.isEmpty ? 0.0 : double.tryParse(amountText) ?? 0.0;
+    final amount = parseCurrency(_amountCtrl.text);
 
     Billing b;
 
@@ -639,14 +835,16 @@ class _EditPageState extends State<EditPage> {
                   labelText: 'Valor (opcional)',
                   prefixIcon: Icon(Icons.attach_money),
                   border: InputBorder.none,
+                  hintText: 'R\$ 0,00',
                 ),
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: TextInputType.number,
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9\.,]'))
+                  FilteringTextInputFormatter.digitsOnly,
+                  RealCurrencyInputFormatter(),
                 ],
               ),
             ),
+
 
             // DATA
             _buildCard(
@@ -1110,10 +1308,10 @@ class _FilterPageState extends State<FilterPage> {
                 color: Colors.green.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.receipt_long,
                 size: 48,
-                color: Colors.green,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
 
@@ -1131,11 +1329,11 @@ class _FilterPageState extends State<FilterPage> {
             const SizedBox(height: 8),
 
             // TEXTO SECUNDÁRIO
-            const Text(
+            Text(
               'Adicione uma conta para começar a organizar seus pagamentos.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.black54,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
 
@@ -1217,10 +1415,15 @@ class ContaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _statusColor();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: color.withOpacity(0.85),
+
+
+    color: isDark
+        ? color.withOpacity(0.65)
+        : color.withOpacity(0.85),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
@@ -1368,4 +1571,192 @@ class _AnimatedSnackContentState extends State<_AnimatedSnackContent>
       ),
     );
   }
+}
+
+
+/* ===================== SETTINGS PAGE ===================== */
+
+// class SettingsPage extends StatefulWidget {
+//   const SettingsPage({Key? key}) : super(key: key);
+//
+//   @override
+//   State<SettingsPage> createState() => _SettingsPageState();
+// }
+
+class SettingsPage extends StatefulWidget {
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
+
+  const SettingsPage({
+    Key? key,
+    required this.isDark,
+    required this.onThemeChanged,
+  }) : super(key: key);
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+
+class _SettingsPageState extends State<SettingsPage> {
+  bool _notificationsEnabled = true;
+  int _notifyDaysBefore = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Configurações'),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _sectionTitle('Notificações'),
+
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: SwitchListTile(
+              title: const Text('Ativar notificações'),
+              subtitle: const Text('Receber lembretes de contas'),
+              value: _notificationsEnabled,
+              onChanged: (v) {
+                setState(() => _notificationsEnabled = v);
+
+                showSnack(
+                  context,
+                  v
+                      ? 'Notificações ativadas'
+                      : 'Notificações desativadas',
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          Opacity(
+            opacity: _notificationsEnabled ? 1 : 0.4,
+            child: IgnorePointer(
+              ignoring: !_notificationsEnabled,
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Avisar quantos dias antes?',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        children: [5, 3, 1].map((d) {
+                          return ChoiceChip(
+                            label: Text('$d dias'),
+                            selected: _notifyDaysBefore == d,
+                            onSelected: (_) {
+                              setState(() => _notifyDaysBefore = d);
+
+                              showSnack(
+                                context,
+                                'Notificação $d dias antes',
+                              );
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          _sectionTitle('Aparência'),
+
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: SwitchListTile(
+              title: const Text('Tema escuro'),
+              subtitle: const Text('Ativar modo noturno'),
+              value: widget.isDark, // 👈 fonte única
+              onChanged: (v) {
+                widget.onThemeChanged(v);
+
+                showSnack(
+                  context,
+                  v ? 'Tema escuro ativado' : 'Tema claro ativado',
+                );
+              },
+            ),
+
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class RealCurrencyInputFormatter extends TextInputFormatter {
+  final NumberFormat _formatter =
+  NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    if (newValue.text.isEmpty) {
+      return const TextEditingValue(text: '');
+    }
+
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final value = double.parse(digitsOnly) / 100;
+
+    final newText = _formatter.format(value);
+
+    return TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
+    );
+  }
+}
+
+double parseCurrency(String text) {
+  if (text.isEmpty) return 0.0;
+
+  final cleaned = text
+      .replaceAll('R\$', '')
+      .replaceAll('.', '')
+      .replaceAll(',', '.')
+      .trim();
+
+  return double.tryParse(cleaned) ?? 0.0;
 }
