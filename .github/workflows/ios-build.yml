@@ -11,7 +11,7 @@ on:
         description: 'Path to iOS project (e.g., "ios" for React Native)'
         required: false
         type: string
-        default: '.'
+        default: 'contas_em_dia_novo/ios'
       scheme:
         description: 'Xcode scheme to build (auto-detected if empty)'
         required: false
@@ -59,7 +59,7 @@ jobs:
       - name: Detect project type
         id: detect
         run: |
-          if [ -f "pubspec.yaml" ]; then
+          if [ -f "contas_em_dia_novo/pubspec.yaml" ]; then
             echo "type=flutter" >> $GITHUB_OUTPUT
           elif [ -f "package.json" ] && grep -q '"expo"' package.json; then
             echo "type=expo" >> $GITHUB_OUTPUT
@@ -79,6 +79,7 @@ jobs:
 
       - name: Flutter pub get
         if: steps.detect.outputs.type == 'flutter'
+        working-directory: contas_em_dia_novo
         run: flutter pub get
 
       - name: Setup Node.js
