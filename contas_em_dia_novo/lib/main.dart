@@ -14,38 +14,120 @@ RouteObserver<ModalRoute<void>>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await DatabaseHelper.instance.database;
 
-  tz.initializeTimeZones();
-  final String timeZoneName = await FlutterNativeTimezone.getLocalTimezone();
-  tz.setLocalLocation(tz.getLocation(timeZoneName));
+  try {
+    await DatabaseHelper.instance.database;
+  } catch (e) {
+    debugPrint('Erro banco: $e');
+  }
 
-  await NotificationHelper.instance.init();
-  runApp(MyApp());
+  try {
+    tz.initializeTimeZones();
+
+    final timeZoneName =
+    await FlutterNativeTimezone.getLocalTimezone();
+
+    tz.setLocalLocation(
+      tz.getLocation(timeZoneName),
+    );
+  } catch (e) {
+    debugPrint('Erro timezone: $e');
+
+    tz.setLocalLocation(
+      tz.getLocation('America/Sao_Paulo'),
+    );
+  }
+
+  try {
+    await NotificationHelper.instance.init();
+  } catch (e) {
+    debugPrint('Erro notificações: $e');
+  }
+
+  runApp(const MyApp());
+
+  Future.microtask(() async {
+    try {
+      final bills =
+      await DatabaseHelper.instance.getAll();
+
+      for (final bill in bills) {
+        if (bill.id != null &&
+            bill.paid == 0) {
+          await NotificationHelper.instance
+              .scheduleNotificationForBilling(
+            bill,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        'Erro reagendando notificações: $e',
+      );
+    }
+  });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isDark = false;
+
+  void _toggleTheme(bool value) {
+    setState(() {
+      _isDark = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Contas em Dia',
       debugShowCheckedModeBanner: false,
+      navigatorObservers: [routeObserver],
+
+      themeMode:
+      _isDark ? ThemeMode.dark : ThemeMode.light,
+
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.green,
+          brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),
-      home: const MainPage(),
+
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.green,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+
+      home: MainPage(
+        isDark: _isDark,
+        onThemeChanged: _toggleTheme,
+      ),
     );
   }
 }
 
 
 class MainPage extends StatefulWidget {
-  const MainPage({Key? key}) : super(key: key);
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
+
+  const MainPage({
+    Key? key,
+    required this.isDark,
+    required this.onThemeChanged,
+  }) : super(key: key);
 
   @override
   State<MainPage> createState() => _MainPageState();
@@ -54,15 +136,19 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _index = 0;
 
-  final _pages =  [
-    HomePage(),
-    FilterPage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+
+    final pages = [
+      HomePage(
+        isDark: widget.isDark,
+        onThemeChanged: widget.onThemeChanged,
+      ),
+      const FilterPage(),
+    ];
+
     return Scaffold(
-      body: _pages[_index],
+      body: pages[_index],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
@@ -83,13 +169,62 @@ class _MainPageState extends State<MainPage> {
 
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
+
+  const HomePage({
+    super.key,
+    required this.isDark,
+    required this.onThemeChanged,
+  });
 
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> with RouteAware {
+
+  DateTime _nextRecurringDate(DateTime current) {
+    final nextMonth = DateTime(
+      current.year,
+      current.month + 1,
+      1,
+    );
+
+    final lastDayOfMonth = DateTime(
+      nextMonth.year,
+      nextMonth.month + 1,
+      0,
+    ).day;
+
+    final day = current.day > lastDayOfMonth
+        ? lastDayOfMonth
+        : current.day;
+
+    return DateTime(
+      nextMonth.year,
+      nextMonth.month,
+      day,
+    );
+  }
+
+
+  Future<bool> _recurringAlreadyExists(
+      Billing bill,
+      DateTime nextDate,
+      ) async {
+
+    final all =
+    await DatabaseHelper.instance.getAll();
+
+    return all.any((b) =>
+    b.id != bill.id &&
+        b.name == bill.name &&
+        b.recurring == 1 &&
+        b.dueDate.year == nextDate.year &&
+        b.dueDate.month == nextDate.month &&
+        b.dueDate.day == nextDate.day);
+  }
 
   Widget _emptyHomeState(BuildContext context) {
     return Center(
@@ -208,13 +343,22 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void initState() {
     super.initState();
+
     _reload();
+
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) {
+      NotificationHelper.instance.requestPermission();
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)!);
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
   }
 
   @override
@@ -234,6 +378,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final all = await DatabaseHelper.instance.getAll();
     setState(() => _items = all);
   }
+
+
 
   String _formatMoney(double v) =>
       NumberFormat.simpleCurrency(locale: 'pt_BR').format(v);
@@ -298,9 +444,69 @@ class _HomePageState extends State<HomePage> with RouteAware {
               leading: Checkbox(
                 value: b.paid == 1,
                 onChanged: (v) async {
+
                   b.paid = v! ? 1 : 0;
+
                   await DatabaseHelper.instance.update(b);
+
+
+                  // cria próxima conta recorrente
+                  // somente quando marcar como paga
+                  if (b.paid == 1 && b.recurring == 1) {
+
+                    final nextDate =
+                    _nextRecurringDate(b.dueDate);
+
+
+                    final exists =
+                    await _recurringAlreadyExists(
+                      b,
+                      nextDate,
+                    );
+
+
+                    if (!exists) {
+
+                      final nextBill = Billing(
+                        name: b.name,
+                        amount: b.amount,
+                        dueDate: nextDate,
+                        recurring: 1,
+                        paid: 0,
+                      );
+
+
+                      final id =
+                      await DatabaseHelper.instance
+                          .insert(nextBill);
+
+                      nextBill.id = id;
+
+
+                      await NotificationHelper.instance
+                          .scheduleNotificationForBilling(
+                          nextBill);
+                    }
+                  }
+
+
+                  if (b.id != null) {
+
+                    if (b.paid == 1) {
+
+                      await NotificationHelper.instance
+                          .cancelNotification(b.id!);
+
+                    } else {
+
+                      await NotificationHelper.instance
+                          .scheduleNotificationForBilling(b);
+                    }
+                  }
+
+
                   await _reload();
+
 
                   showSnack(
                     context,
@@ -309,7 +515,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         : 'Conta marcada como pendente',
                   );
                 },
-
               ),
               trailing: PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -349,7 +554,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     );
 
                     if (confirm == true) {
+
+                      await NotificationHelper.instance
+                          .cancelNotification(b.id!);
+
                       await DatabaseHelper.instance.delete(b.id!);
+
                       await _reload();
 
                       showSnack(
@@ -460,6 +670,22 @@ class _HomePageState extends State<HomePage> with RouteAware {
             ),
           ],
         ),
+
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.black87),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SettingsPage(
+                    isDark: widget.isDark,
+                    onThemeChanged: widget.onThemeChanged,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
 
       // appBar: AppBar(
@@ -528,6 +754,25 @@ class _EditPageState extends State<EditPage> {
   final _nameCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
 
+  double _parseCurrency(String text) {
+    if (text.trim().isEmpty) {
+      return 0.0;
+    }
+
+    String value = text
+        .replaceAll('R\$', '')
+        .replaceAll(' ', '')
+        .trim();
+
+    if (value.contains(',')) {
+      value = value
+          .replaceAll('.', '')
+          .replaceAll(',', '.');
+    }
+
+    return double.tryParse(value) ?? 0.0;
+  }
+
   DateTime _due = DateTime.now();
   bool _recurring = false;
 
@@ -554,8 +799,7 @@ class _EditPageState extends State<EditPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final name = _nameCtrl.text.trim();
-    final amountText = _amountCtrl.text.replaceAll(',', '.');
-    final amount = amountText.isEmpty ? 0.0 : double.tryParse(amountText) ?? 0.0;
+    final amount = _parseCurrency(_amountCtrl.text);
 
     Billing b;
 
@@ -584,9 +828,18 @@ class _EditPageState extends State<EditPage> {
 
     // 🔔 notificações SEM travar UI
     Future.microtask(() async {
+
       if (b.id != null) {
-        await NotificationHelper.instance.cancelNotification(b.id!);
-        await NotificationHelper.instance.scheduleNotificationForBilling(b);
+
+        await NotificationHelper.instance
+            .cancelNotification(b.id!);
+
+        if (b.paid == 0) {
+
+          await NotificationHelper.instance
+              .scheduleNotificationForBilling(b);
+
+        }
       }
     });
 
@@ -820,8 +1073,13 @@ class NotificationHelper {
   FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iOS = DarwinInitializationSettings();
+    const android =
+    AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+
+    const iOS =
+    DarwinInitializationSettings();
 
     await _plugin.initialize(
       const InitializationSettings(
@@ -831,11 +1089,75 @@ class NotificationHelper {
     );
   }
 
+  Future<void> requestPermission() async {
+    final androidPlugin =
+    _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+
+    try {
+      await androidPlugin
+          ?.requestNotificationsPermission();
+
+      final enabled =
+      await androidPlugin
+          ?.areNotificationsEnabled();
+
+      debugPrint(
+        'Notificações permitidas: $enabled',
+      );
+    } catch (e) {
+      debugPrint(
+        'Erro permissão: $e',
+      );
+    }
+  }
+
+  Future<void> showTestNotification() async {
+    const androidDetails =
+    AndroidNotificationDetails(
+      'teste_channel',
+      'Teste',
+      channelDescription:
+      'Canal de testes',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const iosDetails =
+    DarwinNotificationDetails();
+
+    await _plugin.show(
+      999999,
+      '🔔 Teste de notificação',
+      'Se você está vendo isso, as notificações estão funcionando.',
+      const NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      ),
+    );
+  }
+
   /// Agenda notificação 5 dias antes do vencimento
   Future<void> scheduleNotificationForBilling(Billing b) async {
+    debugPrint('===================');
+    debugPrint('Entrou no agendamento');
+    debugPrint('Conta: ${b.name}');
+    debugPrint('ID: ${b.id}');
+    debugPrint('Pago: ${b.paid}');
     if (b.paid == 1) return;
 
-    final notifyDate = b.dueDate.subtract(const Duration(days: 5));
+    //final notifyDate = b.dueDate.subtract(const Duration(days: 5));
+
+    //TESTE NOTIFICAÇÃO - REMOVER APOS TESTE
+    final notifyDate =
+    DateTime.now().add(
+      const Duration(seconds: 15),
+    );
+
+    debugPrint(
+      'Data agendada: $notifyDate',
+    );
+
     if (notifyDate.isBefore(DateTime.now())) return;
 
     final androidDetails = AndroidNotificationDetails(
@@ -847,18 +1169,73 @@ class NotificationHelper {
 
     const iosDetails = DarwinNotificationDetails();
 
+    debugPrint(
+      'Chamando zonedSchedule...',
+    );
+
+    final tzDate =
+    tz.TZDateTime.from(
+      notifyDate,
+      tz.local,
+    );
+
+    debugPrint('Agora: ${DateTime.now()}');
+    debugPrint('TZ Local: ${tz.local}');
+    debugPrint('NotifyDate: $notifyDate');
+    debugPrint('TZ Date: $tzDate');
+
+    // await Future.delayed(
+    //   const Duration(seconds: 15),
+    // );
+    //
+    // await _plugin.show(
+    //   b.id ?? 999,
+    //   'Conta a vencer',
+    //   '${b.name} vence em ${DateFormat('dd/MM/yyyy').format(b.dueDate)}',
+    //   NotificationDetails(
+    //     android: androidDetails,
+    //     iOS: iosDetails,
+    //   ),
+    // );
+    //
+    // debugPrint('Notificação enviada pelo show()');
+
+    //COMENTADO PARA TESTE
     await _plugin.zonedSchedule(
       b.id ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
       'Conta a vencer',
       '${b.name} vence em ${DateFormat('dd/MM/yyyy').format(b.dueDate)}',
-      tz.TZDateTime.from(notifyDate, tz.local),
+      tzDate,
       NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.dateAndTime,
+      androidScheduleMode:
+      AndroidScheduleMode.inexactAllowWhileIdle,
+      // linha comentada para teste
+      // matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
+
+    debugPrint(
+      'zonedSchedule executado',
+    );
+
+    final pending =
+    await _plugin
+        .pendingNotificationRequests();
+
+    debugPrint(
+      'Pendentes: ${pending.length}',
+    );
+
+    for (final p in pending) {
+      debugPrint(
+        'ID=${p.id}'
+            ' | ${p.title}',
+      );
+    }
+
+
   }
 
 
@@ -884,6 +1261,10 @@ class FilterPage extends StatefulWidget {
 }
 
 class _FilterPageState extends State<FilterPage> {
+
+  DateTime _onlyDate(DateTime d) =>
+      DateTime(d.year, d.month, d.day);
+
   final TextEditingController _searchCtrl = TextEditingController();
   DateTime? _selectedDate;
 
@@ -905,15 +1286,23 @@ class _FilterPageState extends State<FilterPage> {
   }
 
   void _applyFilters() {
-    final now = DateTime.now();
+    final now = _onlyDate(DateTime.now());
 
     List<Billing> filtered = _all;
 
     // 1️⃣ PRÉ-FILTRO POR STATUS
     if (_statusFilter == 'Pendentes') {
-      filtered = filtered.where((b) => b.paid == 0 && !b.dueDate.isBefore(now)).toList();
+      filtered = filtered.where(
+            (b) =>
+        b.paid == 0 &&
+            !_onlyDate(b.dueDate).isBefore(now),
+      ).toList();
     } else if (_statusFilter == 'Vencidas') {
-      filtered = filtered.where((b) => b.paid == 0 && b.dueDate.isBefore(now)).toList();
+      filtered = filtered.where(
+            (b) =>
+        b.paid == 0 &&
+            _onlyDate(b.dueDate).isBefore(now),
+      ).toList();
     } else if (_statusFilter == 'Pagas') {
       filtered = filtered.where((b) => b.paid == 1).toList();
     }
@@ -936,9 +1325,15 @@ class _FilterPageState extends State<FilterPage> {
   }
 
   Color _statusColor(Billing b) {
-    final now = DateTime.now();
+
+    final now = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+
     if (b.paid == 1) return Colors.green;
-    if (b.dueDate.isBefore(now)) return Colors.red;
+    if (_onlyDate(b.dueDate).isBefore(now)) return Colors.red;
     if (b.dueDate.difference(now).inDays <= 5) return Colors.orange;
     return Colors.blueGrey;
   }
@@ -1075,7 +1470,12 @@ class _FilterPageState extends State<FilterPage> {
                     );
 
                     if (confirm == true) {
+
+                      await NotificationHelper.instance
+                          .cancelNotification(b.id!);
+
                       await DatabaseHelper.instance.delete(b.id!);
+
                       _load();
 
                       showSnack(
@@ -1093,6 +1493,12 @@ class _FilterPageState extends State<FilterPage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Widget _emptyState(BuildContext context) {
@@ -1202,13 +1608,24 @@ class ContaCard extends StatelessWidget {
   }) : super(key: key);
 
   Color _statusColor() {
-    final now = DateTime.now();
+
+    final now = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
 
     if (billing.paid == 1) return Colors.green;
     if (billing.dueDate.isBefore(DateTime(now.year, now.month, now.day))) {
       return Colors.red;
     }
-    if (billing.dueDate.difference(now).inDays <= 5) {
+    if (
+    DateTime(
+      billing.dueDate.year,
+      billing.dueDate.month,
+      billing.dueDate.day,
+    ).difference(now).inDays <= 5
+    ) {
       return Colors.orange;
     }
     return Colors.blue;
@@ -1364,6 +1781,173 @@ class _AnimatedSnackContentState extends State<_AnimatedSnackContent>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/* ===================== SETTINGS PAGE ===================== */
+
+class SettingsPage extends StatefulWidget {
+  final bool isDark;
+  final ValueChanged<bool> onThemeChanged;
+
+  const SettingsPage({
+    Key? key,
+    required this.isDark,
+    required this.onThemeChanged,
+  }) : super(key: key);
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  bool _notificationsEnabled = true;
+  int _notifyDaysBefore = 5;
+  bool _darkTheme = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Configurações'),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _sectionTitle('Notificações'),
+
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: SwitchListTile(
+              title: const Text('Ativar notificações'),
+              subtitle: const Text('Receber lembretes de contas'),
+              value: _notificationsEnabled,
+              onChanged: (v) {
+                setState(() => _notificationsEnabled = v);
+
+                showSnack(
+                  context,
+                  v
+                      ? 'Notificações ativadas'
+                      : 'Notificações desativadas',
+                );
+              },
+            ),
+          ),
+
+          // 👇 COLE AQUI
+          const SizedBox(height: 12),
+
+          SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.notifications),
+              label: const Text(
+                'Testar notificação',
+              ),
+              onPressed: () async {
+                await NotificationHelper.instance
+                    .showTestNotification();
+
+                showSnack(
+                  context,
+                  'Notificação enviada',
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          Opacity(
+            opacity: _notificationsEnabled ? 1 : 0.4,
+            child: IgnorePointer(
+              ignoring: !_notificationsEnabled,
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Avisar quantos dias antes?',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        children: [5, 3, 1].map((d) {
+                          return ChoiceChip(
+                            label: Text('$d dias'),
+                            selected: _notifyDaysBefore == d,
+                            onSelected: (_) {
+                              setState(() => _notifyDaysBefore = d);
+
+                              showSnack(
+                                context,
+                                'Notificação $d dias antes',
+                              );
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          _sectionTitle('Aparência'),
+
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: SwitchListTile(
+              title: const Text('Tema escuro'),
+              subtitle: const Text('Ativar modo noturno'),
+              value: widget.isDark,
+              onChanged: (v) {
+                widget.onThemeChanged(v);
+
+                showSnack(
+                  context,
+                  v
+                      ? 'Tema escuro ativado'
+                      : 'Tema claro ativado',
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.green,
         ),
       ),
     );
