@@ -198,7 +198,7 @@ jobs:
               echo "Building Flutter iOS Release..."
               flutter build ios --release --no-codesign
             fi
-            cd "$IOS_PATH"
+            cd ios
           elif [ "$PROJECT_TYPE" = "reactnative" ] || [ "$PROJECT_TYPE" = "expo" ]; then
             # Use xcodebuild directly for React Native/Expo
             echo "Building React Native iOS ($CONFIGURATION)..."
