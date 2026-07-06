@@ -1,0 +1,17 @@
+{
+  "project": "Contas em Dia",
+  "platform": "ios",
+  "github": {
+    "owner": "LeticiaRodrigues03",
+    "repo": "contas_em_dia"
+  },
+  "ios": {
+    "path": "contas_em_dia_novo/ios"
+  },
+  "flutter": {
+    "version": "3.38.6",
+    "watch": {}
+  },
+  "reactNative": {},
+  "mobai": {}
+}

@@ -1,0 +1,11 @@
+Found IPA: dist\Contas em Dia-e1bd30e0.ipa
+
+Connecting to MobAI...
+Using device: iPhone de letic_rawbv44
+Use the arrow keys to navigate: ↓ ↑ → ← 
+? Resign app: 
+  > No
+    Yes
+v No
+Installing app...
+Error: install app: API error: installation failed: failed to install IPA: your app is not properly signed for this device, check your codesigning and provisioningprofile. original error: 'ApplicationVerificationFailed' errorDescription:'Failed to verify code signature of /var/installd/Library/Caches/com.apple.mobile.installd.staging/temp.QwWVjU/extracted/Payload/Runner.app : 0xe800801c (No code signature found.)'
